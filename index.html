@@ -152,6 +152,29 @@
             background: rgba(255, 255, 255, 0.5);
             border-radius: 5px;
         }
+
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            background: white;
+            color: #333;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+
+        .formula-display {
+            text-align: center;
+            font-size: 1.2rem;
+            color: #667eea;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
@@ -162,6 +185,7 @@
             <button class="mode-btn" data-mode="wave">波形</button>
             <button class="mode-btn" data-mode="shapes">図形</button>
             <button class="mode-btn" data-mode="pendulum">振り子</button>
+            <button class="mode-btn" data-mode="formula">数式</button>
         </div>
     </div>
 
@@ -227,8 +251,20 @@
                     angle: { label: '初期角度', min: -80, max: 80, value: 45, unit: '°' },
                     damping: { label: '減衰率', min: 0, max: 1, value: 0.995, unit: '', step: 0.001 }
                 }
+            },
+            formula: {
+                name: '数式',
+                params: {
+                    a: { label: '係数 a', min: -5, max: 5, value: 1, unit: '', step: 0.1 },
+                    b: { label: '係数 b', min: -5, max: 5, value: 0, unit: '', step: 0.1 },
+                    c: { label: '係数 c', min: -10, max: 10, value: 0, unit: '', step: 0.1 },
+                    zoom: { label: '拡大率', min: 1, max: 50, value: 20, unit: 'x' }
+                }
             }
         };
+
+        // Current formula type
+        let currentFormula = 'quadratic';
 
         // Initialize controls
         function initControls() {
@@ -236,6 +272,26 @@
             params = {};
 
             let html = '';
+
+            // Add formula selector for formula mode
+            if (currentMode === 'formula') {
+                html += `
+                    <select id="formula-selector">
+                        <option value="quadratic">二次関数: y = ax² + bx + c</option>
+                        <option value="cubic">三次関数: y = ax³ + bx² + c</option>
+                        <option value="sin">正弦関数: y = a·sin(bx) + c</option>
+                        <option value="cos">余弦関数: y = a·cos(bx) + c</option>
+                        <option value="tan">正接関数: y = a·tan(bx) + c</option>
+                        <option value="exp">指数関数: y = a·e^(bx) + c</option>
+                        <option value="log">対数関数: y = a·ln(bx) + c</option>
+                        <option value="abs">絶対値: y = a·|bx| + c</option>
+                        <option value="inverse">反比例: y = a/x + c</option>
+                        <option value="sqrt">平方根: y = a·√(bx) + c</option>
+                    </select>
+                    <div class="formula-display" id="formula-display">y = ax² + bx + c</div>
+                `;
+            }
+
             for (const [key, config] of Object.entries(mode.params)) {
                 params[key] = config.value;
                 const step = config.step || 1;
@@ -254,6 +310,15 @@
             html += '<div class="info">パラメータを調整してシミュレーションを観察しましょう</div>';
             controlsContainer.innerHTML = html;
 
+            // Add formula selector event listener
+            if (currentMode === 'formula') {
+                const formulaSelector = document.getElementById('formula-selector');
+                formulaSelector.addEventListener('change', (e) => {
+                    currentFormula = e.target.value;
+                    updateFormulaDisplay();
+                });
+            }
+
             // Add event listeners
             for (const key of Object.keys(mode.params)) {
                 const input = document.getElementById(key);
@@ -271,6 +336,27 @@
                     e.target.focus();
                 });
             }
+        }
+
+        // Update formula display
+        function updateFormulaDisplay() {
+            const formulaDisplay = document.getElementById('formula-display');
+            if (!formulaDisplay) return;
+
+            const formulas = {
+                quadratic: 'y = ax² + bx + c',
+                cubic: 'y = ax³ + bx² + c',
+                sin: 'y = a·sin(bx) + c',
+                cos: 'y = a·cos(bx) + c',
+                tan: 'y = a·tan(bx) + c',
+                exp: 'y = a·e^(bx) + c',
+                log: 'y = a·ln(bx) + c',
+                abs: 'y = a·|bx| + c',
+                inverse: 'y = a/x + c',
+                sqrt: 'y = a·√(bx) + c'
+            };
+
+            formulaDisplay.textContent = formulas[currentFormula];
         }
 
         // Animation functions for each mode
@@ -483,6 +569,139 @@
                     ctx.beginPath();
                     ctx.arc(centerX, centerY, length, 0, Math.PI);
                     ctx.stroke();
+
+                    animationId = requestAnimationFrame(animate);
+                }
+                animate();
+            },
+
+            formula: function() {
+                function animate() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const a = params.a;
+                    const b = params.b;
+                    const c = params.c;
+                    const zoom = params.zoom;
+
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+
+                    // Draw grid
+                    ctx.strokeStyle = '#f0f0f0';
+                    ctx.lineWidth = 1;
+
+                    // Vertical grid lines
+                    for (let x = centerX % 20; x < canvas.width; x += 20) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, 0);
+                        ctx.lineTo(x, canvas.height);
+                        ctx.stroke();
+                    }
+
+                    // Horizontal grid lines
+                    for (let y = centerY % 20; y < canvas.height; y += 20) {
+                        ctx.beginPath();
+                        ctx.moveTo(0, y);
+                        ctx.lineTo(canvas.width, y);
+                        ctx.stroke();
+                    }
+
+                    // Draw axes
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 2;
+
+                    // X-axis
+                    ctx.beginPath();
+                    ctx.moveTo(0, centerY);
+                    ctx.lineTo(canvas.width, centerY);
+                    ctx.stroke();
+
+                    // Y-axis
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, 0);
+                    ctx.lineTo(centerX, canvas.height);
+                    ctx.stroke();
+
+                    // Draw axis labels
+                    ctx.fillStyle = '#666';
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('0', centerX + 5, centerY - 5);
+                    ctx.fillText('x', canvas.width - 20, centerY - 10);
+                    ctx.fillText('y', centerX + 10, 20);
+
+                    // Calculate y value based on formula
+                    function calculateY(x) {
+                        try {
+                            switch(currentFormula) {
+                                case 'quadratic':
+                                    return a * x * x + b * x + c;
+                                case 'cubic':
+                                    return a * x * x * x + b * x * x + c;
+                                case 'sin':
+                                    return a * Math.sin(b * x) + c;
+                                case 'cos':
+                                    return a * Math.cos(b * x) + c;
+                                case 'tan':
+                                    return a * Math.tan(b * x) + c;
+                                case 'exp':
+                                    return a * Math.exp(b * x) + c;
+                                case 'log':
+                                    return b * x > 0 ? a * Math.log(b * x) + c : NaN;
+                                case 'abs':
+                                    return a * Math.abs(b * x) + c;
+                                case 'inverse':
+                                    return x !== 0 ? a / x + c : NaN;
+                                case 'sqrt':
+                                    return b * x >= 0 ? a * Math.sqrt(b * x) + c : NaN;
+                                default:
+                                    return 0;
+                            }
+                        } catch (e) {
+                            return NaN;
+                        }
+                    }
+
+                    // Draw function curve
+                    ctx.strokeStyle = '#667eea';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+
+                    let started = false;
+                    for (let px = 0; px < canvas.width; px++) {
+                        const x = (px - centerX) / zoom;
+                        const y = calculateY(x);
+
+                        if (!isNaN(y) && isFinite(y)) {
+                            const py = centerY - y * zoom;
+
+                            if (py >= -50 && py <= canvas.height + 50) {
+                                if (!started) {
+                                    ctx.moveTo(px, py);
+                                    started = true;
+                                } else {
+                                    ctx.lineTo(px, py);
+                                }
+                            } else {
+                                started = false;
+                            }
+                        } else {
+                            started = false;
+                        }
+                    }
+                    ctx.stroke();
+
+                    // Draw point at x=0
+                    const y0 = calculateY(0);
+                    if (!isNaN(y0) && isFinite(y0)) {
+                        const py0 = centerY - y0 * zoom;
+                        if (py0 >= 0 && py0 <= canvas.height) {
+                            ctx.fillStyle = '#764ba2';
+                            ctx.beginPath();
+                            ctx.arc(centerX, py0, 6, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
 
                     animationId = requestAnimationFrame(animate);
                 }
