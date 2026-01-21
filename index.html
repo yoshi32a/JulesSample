@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>インタラクティブ数学シミュレーター</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            touch-action: none;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+
+        .mode-selector {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .mode-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            background: #667eea;
+            color: white;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            touch-action: manipulation;
+        }
+
+        .mode-btn:active {
+            transform: scale(0.95);
+        }
+
+        .mode-btn.active {
+            background: #764ba2;
+            box-shadow: 0 4px 15px rgba(118, 75, 162, 0.4);
+        }
+
+        .canvas-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+        }
+
+        canvas {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            max-width: 100%;
+            max-height: 100%;
+            touch-action: none;
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            color: #333;
+            font-size: 0.9rem;
+        }
+
+        .control-value {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 40px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-track {
+            height: 8px;
+            background: #ddd;
+            border-radius: 4px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            background: #667eea;
+            border-radius: 50%;
+            cursor: pointer;
+            margin-top: -8px;
+        }
+
+        input[type="range"]::-moz-range-track {
+            height: 8px;
+            background: #ddd;
+            border-radius: 4px;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            background: #667eea;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        .info {
+            text-align: center;
+            color: #666;
+            font-size: 0.8rem;
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔬 インタラクティブ数学シミュレーター</h1>
+        <div class="mode-selector">
+            <button class="mode-btn active" data-mode="projectile">弾道計算</button>
+            <button class="mode-btn" data-mode="wave">波形</button>
+            <button class="mode-btn" data-mode="shapes">図形</button>
+            <button class="mode-btn" data-mode="pendulum">振り子</button>
+        </div>
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="controls" id="controls">
+        <!-- Controls will be dynamically inserted here -->
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const controlsContainer = document.getElementById('controls');
+
+        // Canvas setup
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            const maxWidth = Math.min(container.clientWidth - 20, 800);
+            const maxHeight = Math.min(container.clientHeight - 20, 600);
+            canvas.width = maxWidth;
+            canvas.height = maxHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Current mode and parameters
+        let currentMode = 'projectile';
+        let params = {};
+        let animationId = null;
+
+        // Mode configurations
+        const modes = {
+            projectile: {
+                name: '弾道計算',
+                params: {
+                    velocity: { label: '初速度', min: 10, max: 100, value: 50, unit: 'm/s' },
+                    angle: { label: '角度', min: 0, max: 90, value: 45, unit: '°' },
+                    gravity: { label: '重力', min: 5, max: 20, value: 9.8, unit: 'm/s²', step: 0.1 }
+                }
+            },
+            wave: {
+                name: '波形',
+                params: {
+                    frequency: { label: '周波数', min: 1, max: 10, value: 2, unit: 'Hz', step: 0.1 },
+                    amplitude: { label: '振幅', min: 10, max: 100, value: 50, unit: 'px' },
+                    phase: { label: '位相', min: 0, max: 360, value: 0, unit: '°' }
+                }
+            },
+            shapes: {
+                name: '図形',
+                params: {
+                    sides: { label: '辺の数', min: 3, max: 12, value: 6, unit: '辺' },
+                    radius: { label: '半径', min: 50, max: 200, value: 100, unit: 'px' },
+                    rotation: { label: '回転', min: 0, max: 360, value: 0, unit: '°' }
+                }
+            },
+            pendulum: {
+                name: '振り子',
+                params: {
+                    length: { label: '長さ', min: 50, max: 250, value: 150, unit: 'px' },
+                    angle: { label: '初期角度', min: -80, max: 80, value: 45, unit: '°' },
+                    damping: { label: '減衰率', min: 0, max: 1, value: 0.995, unit: '', step: 0.001 }
+                }
+            }
+        };
+
+        // Initialize controls
+        function initControls() {
+            const mode = modes[currentMode];
+            params = {};
+
+            let html = '';
+            for (const [key, config] of Object.entries(mode.params)) {
+                params[key] = config.value;
+                const step = config.step || 1;
+                html += `
+                    <div class="control-group">
+                        <div class="control-label">
+                            <span>${config.label}</span>
+                            <span class="control-value" id="${key}-value">${config.value}${config.unit}</span>
+                        </div>
+                        <input type="range" id="${key}" min="${config.min}" max="${config.max}"
+                               value="${config.value}" step="${step}" data-unit="${config.unit}">
+                    </div>
+                `;
+            }
+
+            html += '<div class="info">パラメータを調整してシミュレーションを観察しましょう</div>';
+            controlsContainer.innerHTML = html;
+
+            // Add event listeners
+            for (const key of Object.keys(mode.params)) {
+                const input = document.getElementById(key);
+                const valueDisplay = document.getElementById(`${key}-value`);
+                const unit = input.dataset.unit;
+
+                input.addEventListener('input', (e) => {
+                    const value = parseFloat(e.target.value);
+                    params[key] = value;
+                    valueDisplay.textContent = `${value}${unit}`;
+                });
+
+                // Touch support
+                input.addEventListener('touchstart', (e) => {
+                    e.target.focus();
+                });
+            }
+        }
+
+        // Animation functions for each mode
+        const animations = {
+            projectile: function() {
+                let t = 0;
+                const dt = 0.016;
+
+                function animate() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const v0 = params.velocity;
+                    const angle = params.angle * Math.PI / 180;
+                    const g = params.gravity;
+
+                    const vx = v0 * Math.cos(angle);
+                    const vy = v0 * Math.sin(angle);
+
+                    const scale = canvas.width / 200;
+                    const x = vx * t * scale * 2;
+                    const y = canvas.height - 50 - (vy * t - 0.5 * g * t * t) * scale * 2;
+
+                    // Draw ground
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(0, canvas.height - 50);
+                    ctx.lineTo(canvas.width, canvas.height - 50);
+                    ctx.stroke();
+
+                    // Draw trajectory
+                    ctx.strokeStyle = '#667eea';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    for (let i = 0; i <= t; i += 0.1) {
+                        const tx = vx * i * scale * 2;
+                        const ty = canvas.height - 50 - (vy * i - 0.5 * g * i * i) * scale * 2;
+                        if (i === 0) ctx.moveTo(tx, ty);
+                        else ctx.lineTo(tx, ty);
+                    }
+                    ctx.stroke();
+
+                    // Draw projectile
+                    if (y <= canvas.height - 50 && x <= canvas.width) {
+                        ctx.fillStyle = '#764ba2';
+                        ctx.beginPath();
+                        ctx.arc(x, y, 10, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        t += dt;
+                    } else {
+                        t = 0;
+                    }
+
+                    animationId = requestAnimationFrame(animate);
+                }
+                animate();
+            },
+
+            wave: function() {
+                let time = 0;
+
+                function animate() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const freq = params.frequency;
+                    const amp = params.amplitude;
+                    const phase = params.phase * Math.PI / 180;
+
+                    const centerY = canvas.height / 2;
+
+                    // Draw center line
+                    ctx.strokeStyle = '#ddd';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(0, centerY);
+                    ctx.lineTo(canvas.width, centerY);
+                    ctx.stroke();
+
+                    // Draw wave
+                    ctx.strokeStyle = '#667eea';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+
+                    for (let x = 0; x < canvas.width; x++) {
+                        const y = centerY + amp * Math.sin(freq * x * 0.02 + time + phase);
+                        if (x === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+
+                    // Draw moving point
+                    const pointX = canvas.width / 4;
+                    const pointY = centerY + amp * Math.sin(freq * pointX * 0.02 + time + phase);
+                    ctx.fillStyle = '#764ba2';
+                    ctx.beginPath();
+                    ctx.arc(pointX, pointY, 8, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    time += 0.05;
+                    animationId = requestAnimationFrame(animate);
+                }
+                animate();
+            },
+
+            shapes: function() {
+                let rotation = 0;
+
+                function animate() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const sides = Math.round(params.sides);
+                    const radius = params.radius;
+                    const baseRotation = params.rotation * Math.PI / 180;
+
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+
+                    ctx.save();
+                    ctx.translate(centerX, centerY);
+                    ctx.rotate(rotation + baseRotation);
+
+                    // Draw polygon
+                    ctx.fillStyle = 'rgba(102, 126, 234, 0.3)';
+                    ctx.strokeStyle = '#667eea';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+
+                    for (let i = 0; i <= sides; i++) {
+                        const angle = (i / sides) * Math.PI * 2;
+                        const x = radius * Math.cos(angle);
+                        const y = radius * Math.sin(angle);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Draw center point
+                    ctx.fillStyle = '#764ba2';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Draw vertices
+                    for (let i = 0; i < sides; i++) {
+                        const angle = (i / sides) * Math.PI * 2;
+                        const x = radius * Math.cos(angle);
+                        const y = radius * Math.sin(angle);
+                        ctx.fillStyle = '#764ba2';
+                        ctx.beginPath();
+                        ctx.arc(x, y, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    ctx.restore();
+
+                    rotation += 0.01;
+                    animationId = requestAnimationFrame(animate);
+                }
+                animate();
+            },
+
+            pendulum: function() {
+                let angle = params.angle * Math.PI / 180;
+                let angularVelocity = 0;
+
+                function animate() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const length = params.length;
+                    const damping = params.damping;
+
+                    const centerX = canvas.width / 2;
+                    const centerY = 50;
+
+                    // Physics
+                    const angularAcceleration = -0.01 * Math.sin(angle);
+                    angularVelocity += angularAcceleration;
+                    angularVelocity *= damping;
+                    angle += angularVelocity;
+
+                    const bobX = centerX + length * Math.sin(angle);
+                    const bobY = centerY + length * Math.cos(angle);
+
+                    // Draw pivot
+                    ctx.fillStyle = '#333';
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Draw string
+                    ctx.strokeStyle = '#667eea';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY);
+                    ctx.lineTo(bobX, bobY);
+                    ctx.stroke();
+
+                    // Draw bob
+                    ctx.fillStyle = '#764ba2';
+                    ctx.beginPath();
+                    ctx.arc(bobX, bobY, 20, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Draw arc guide
+                    ctx.strokeStyle = 'rgba(102, 126, 234, 0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, length, 0, Math.PI);
+                    ctx.stroke();
+
+                    animationId = requestAnimationFrame(animate);
+                }
+                animate();
+            }
+        };
+
+        // Mode switching
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentMode = btn.dataset.mode;
+
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                }
+
+                initControls();
+                animations[currentMode]();
+            });
+        });
+
+        // Initialize
+        initControls();
+        animations[currentMode]();
+    </script>
+</body>
+</html>
